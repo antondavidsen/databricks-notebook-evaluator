@@ -11,6 +11,7 @@ from .citations import (
     validate_citation,
 )
 from .config import load_config
+from .extract import Claim, Ledger, extract_claims, plan_chunks
 from .facts import StaticFacts, extract_facts, render_facts_for_prompt
 from .llm import FakeLLM, LLMClient, make_client
 from .models import (
@@ -43,15 +44,18 @@ __all__ = [
     "CellKind",
     "Citation",
     "CitationError",
+    "Claim",
     "Excerpt",
     "FakeLLM",
     "LLMClient",
+    "Ledger",
     "Line",
     "NotebookError",
     "NotebookFormatError",
     "ParseResult",
     "StaticFacts",
     "UnsupportedFormatError",
+    "extract_claims",
     "extract_facts",
     "find_citations",
     "format_citation",
@@ -61,6 +65,7 @@ __all__ = [
     "parse_citation",
     "parse_file",
     "parse_text",
+    "plan_chunks",
     "render_facts_for_prompt",
     "validate_citation",
 ]
