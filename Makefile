@@ -1,8 +1,9 @@
-.PHONY: help sync mypy test ruff format format-check lint ci clean
+.PHONY: help sync run mypy test ruff format format-check lint ci clean
 
 help:  ## Show available targets
 	@echo "Available targets:"
 	@echo "  make sync         Install/refresh the environment with uv"
+	@echo "  make run          Start the local harness app"
 	@echo "  make mypy         Run mypy type checker (strict)"
 	@echo "  make test         Run pytest with coverage"
 	@echo "  make ruff         Run ruff linter"
@@ -13,6 +14,9 @@ help:  ## Show available targets
 
 sync:
 	uv sync --all-extras
+
+run:
+	uv run python -m harness
 
 mypy:
 	uv run mypy harness tests

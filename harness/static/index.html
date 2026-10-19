@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notebook Harness</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>Notebook Harness</h1>
+      <p class="sub">Upload a Databricks <code>.py</code> notebook. Every sentence links
+        back to the code that supports it.</p>
+    </div>
+    <span id="badge" class="badge model">connecting</span>
+  </header>
+
+  <main>
+    <section class="panel run-panel" aria-labelledby="run-title">
+      <h2 id="run-title">1 &middot; Choose a notebook</h2>
+      <div class="picker">
+        <label class="file-label" for="file">Notebook (.py)</label>
+        <input id="file" type="file" accept=".py">
+        <button id="sample" type="button" class="secondary" hidden>Use sample</button>
+      </div>
+      <p id="picked" class="picked">No notebook chosen.</p>
+      <div class="actions">
+        <button id="run" type="button" disabled>Generate documents</button>
+      </div>
+      <div id="progress-box" class="progress-box" hidden>
+        <progress id="progress" max="1"></progress>
+        <p id="stage" class="stage" role="status"></p>
+      </div>
+      <p id="error" class="error" role="alert" hidden></p>
+    </section>
+
+    <section class="panel results" aria-labelledby="results-title">
+      <div class="results-head">
+        <h2 id="results-title">2 &middot; Read the documents</h2>
+        <p id="summary" class="summary"></p>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Documents">
+        <button role="tab" type="button" data-tab="manager" aria-selected="true">For a manager</button>
+        <button role="tab" type="button" data-tab="developer" aria-selected="false">For a developer</button>
+        <button role="tab" type="button" data-tab="agent" aria-selected="false">For an agent</button>
+        <button role="tab" type="button" data-tab="claims" aria-selected="false">Claims</button>
+      </div>
+
+      <div class="split">
+        <article id="doc" class="doc" aria-live="polite">
+          <p class="muted">Run a notebook to see the documents.</p>
+        </article>
+        <aside class="code-pane" aria-labelledby="code-title">
+          <h3 id="code-title">Cited code</h3>
+          <div id="code" class="code">
+            <p class="muted">Click a citation chip to show its code.</p>
+          </div>
+        </aside>
+      </div>
+
+      <div id="notes-box" class="notes-box" hidden>
+        <h3>How to read this</h3>
+        <ul id="notes"></ul>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
