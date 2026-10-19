@@ -1,0 +1,57 @@
+# Copy this file to config.toml (gitignored) and set a real model name.
+#
+# The API key never belongs in this file.  Export the environment variable
+# named by api_key_env (GEMINI_API_KEY by default) in your shell:
+#
+#   export GEMINI_API_KEY="..."
+#
+# Gemini's free tier returns HTTP 429 when its per-minute or per-day quota is
+# exhausted.  The harness retries 429s with exponential backoff and honors
+# Retry-After, but a free-tier run can still fail after max_retries; wait for
+# the quota window or switch providers instead of raising max_retries forever.
+
+[llm]
+provider = "gemini"
+
+# Required.  Model names change; check the provider's current model list and
+# replace this placeholder before running anything.
+model = "REPLACE_ME"
+
+# Optional.  Defaults are shown; uncomment only what you need to change.
+# api_key_env = "GEMINI_API_KEY"
+# base_url = "https://generativelanguage.googleapis.com/v1beta"
+
+# "auto" picks json_mode for Gemini/OpenAI and prompt for Anthropic/local.
+# Anthropic has no JSON mode.  Explicit "prompt" also works for Gemini/OpenAI.
+# structured = "auto"
+
+# Optional.  Omit for the provider default.  OpenAI reasoning models reject
+# non-default temperature values, so leave this commented out for them.
+# temperature = 0.0
+
+max_output_tokens = 4096
+timeout_s = 120
+
+# Retries for 429, 5xx, timeouts, and connection failures.
+max_retries = 3
+
+# Extra attempts to repair malformed or schema-invalid JSON.
+repair_retries = 2
+
+# One JSON line per provider call.  The API key is scrubbed from every record.
+log_path = "runs/llm_calls.jsonl"
+
+# --- Local OpenAI-compatible server -----------------------------------------
+# Ollama, vLLM, and LM Studio expose an OpenAI-compatible API.  Local servers
+# normally need no key; set api_key_env only if yours does, and export it.
+#
+# provider = "local"
+# model = "your-local-model"
+# base_url = "http://localhost:11434/v1"
+# api_key_env = ""
+# structured = "prompt"
+#
+# --- Anthropic ---------------------------------------------------------------
+# provider = "anthropic"
+# model = "REPLACE_ME"
+# structured = "prompt"   # Anthropic has no JSON mode

@@ -9,7 +9,7 @@ description = "Exact line-number model, parser, and citations for Databricks Pyt
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-dependencies = []
+dependencies = ["pydantic>=2,<3"]
 
 [project.optional-dependencies]
 dev = [

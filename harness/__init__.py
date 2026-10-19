@@ -10,7 +10,9 @@ from .citations import (
     parse_citation,
     validate_citation,
 )
+from .config import load_config
 from .facts import StaticFacts, extract_facts, render_facts_for_prompt
+from .llm import FakeLLM, LLMClient, make_client
 from .models import (
     Cell,
     CellKind,
@@ -42,6 +44,8 @@ __all__ = [
     "Citation",
     "CitationError",
     "Excerpt",
+    "FakeLLM",
+    "LLMClient",
     "Line",
     "NotebookError",
     "NotebookFormatError",
@@ -51,6 +55,8 @@ __all__ = [
     "extract_facts",
     "find_citations",
     "format_citation",
+    "load_config",
+    "make_client",
     "numbered_listing",
     "parse_citation",
     "parse_file",
