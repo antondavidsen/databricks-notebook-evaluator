@@ -10,6 +10,13 @@ from .citations import (
     parse_citation,
     validate_citation,
 )
+from .compose import (
+    Document,
+    DocumentSet,
+    compose_document,
+    compose_documents,
+    render_markdown,
+)
 from .config import load_config
 from .extract import Claim, Ledger, extract_claims, plan_chunks
 from .facts import StaticFacts, extract_facts, render_facts_for_prompt
@@ -46,6 +53,8 @@ __all__ = [
     "Citation",
     "CitationError",
     "Claim",
+    "Document",
+    "DocumentSet",
     "Excerpt",
     "FakeLLM",
     "LLMClient",
@@ -58,6 +67,8 @@ __all__ = [
     "UnsupportedFormatError",
     "VerifiedClaim",
     "VerifiedLedger",
+    "compose_document",
+    "compose_documents",
     "extract_claims",
     "extract_facts",
     "find_citations",
@@ -70,6 +81,7 @@ __all__ = [
     "parse_text",
     "plan_chunks",
     "render_facts_for_prompt",
+    "render_markdown",
     "validate_citation",
     "verify_claim",
     "verify_ledger",
