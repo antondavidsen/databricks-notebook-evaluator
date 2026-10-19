@@ -3,16 +3,13 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "databricks-notebook-evaluator"
+name = "databricks-notebook-harness"
 version = "0.1.0"
-description = "A typed Python project."
+description = "Exact line-number model, parser, and citations for Databricks Python notebooks."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "databricks-notebook-evaluator Contributors" }]
-dependencies = [
-    "pydantic>=2.10,<3",
-]
+dependencies = []
 
 [project.optional-dependencies]
 dev = [
@@ -23,37 +20,43 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/databricks_notebook_evaluator"]
+packages = ["harness"]
 
 [tool.pytest.ini_options]
-addopts = ["--strict-config", "--strict-markers", "--cov=databricks_notebook_evaluator", "--cov-report=term-missing"]
+addopts = [
+    "--strict-config",
+    "--strict-markers",
+    "--cov=harness",
+    "--cov-branch",
+    "--cov-report=term-missing",
+]
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.coverage.run]
 branch = true
-omit = [
-    "**/__main__.py",
-]
 
 [tool.coverage.report]
+fail_under = 100
 exclude_also = [
     "if TYPE_CHECKING:",
-    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
 ]
-fail_under = 100
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
 warn_unreachable = true
 warn_unused_configs = true
-mypy_path = "src"
+mypy_path = "."
 explicit_package_bases = true
+exclude = ["^tests/fixtures/"]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 88
-src = ["src", "tests"]
+src = ["harness", "tests"]
+extend-exclude = ["tests/fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]

@@ -15,20 +15,20 @@ sync:
 	uv sync --all-extras
 
 mypy:
-	uv run mypy src tests
+	uv run mypy harness tests
 
 test:
 	uv run pytest
 
 ruff:
-	uv run ruff check src tests
+	uv run ruff check harness tests
 
 format:
-	uv run ruff format src tests
-	uv run ruff check --fix src tests
+	uv run ruff format harness tests
+	uv run ruff check --fix harness tests
 
 format-check:
-	uv run ruff format --check src tests
+	uv run ruff format --check harness tests
 
 lint: mypy ruff
 	@echo "All linters passed"

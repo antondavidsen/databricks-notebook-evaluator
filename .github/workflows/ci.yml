@@ -29,13 +29,13 @@ jobs:
         run: uv sync --all-extras
 
       - name: Lint (ruff)
-        run: uv run ruff check src tests
+        run: uv run ruff check harness tests
 
       - name: Verify formatting (ruff)
-        run: uv run ruff format --check src tests
+        run: uv run ruff format --check harness tests
 
       - name: Type check (mypy)
-        run: uv run mypy src tests
+        run: uv run mypy harness tests
 
       - name: Test (pytest with coverage)
         run: uv run pytest
