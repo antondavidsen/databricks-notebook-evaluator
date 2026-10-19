@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
-from harness.config import ConfigError, LLMConfig, load_config
+from harness.config import ConfigError, LLMConfig, load_config, load_dotenv
 
 
 def document(**settings: object) -> str:
@@ -264,3 +265,131 @@ def test_invalid_settings_raise_config_error(
 
     with pytest.raises(ConfigError, match=match):
         load_config(path)
+
+
+def test_load_dotenv_parses_quotes_comments_and_exports(tmp_path: Path) -> None:
+    path = tmp_path / ".env"
+    path.write_text(
+        "\ufeff# a comment\n"
+        "\n"
+        "export FIRST=one\n"
+        'SECOND="two # kept"  # ignored\n'
+        "THIRD='three \\n literal'\n"
+        "FOURTH=four # ignored\n"
+        "FIFTH=a=b\n"
+        "EMPTY=\n"
+        "HASH=# comment becomes an empty value\n"
+        'DOUBLE="line\\nbreak\\tend \\"q\\" \\\\ done"\n'
+        "exportFOO=bar\n"
+        "FIRST=final\n",
+        encoding="utf-8",
+    )
+    env: dict[str, str] = {}
+
+    assert load_dotenv(path, env=env) is True
+
+    assert env == {
+        "FIRST": "final",
+        "SECOND": "two # kept",
+        "THIRD": "three \\n literal",
+        "FOURTH": "four",
+        "FIFTH": "a=b",
+        "EMPTY": "",
+        "HASH": "",
+        "DOUBLE": 'line\nbreak\tend "q" \\ done',
+        "exportFOO": "bar",
+    }
+
+
+def test_load_dotenv_does_not_override_shell_values_unless_asked(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / ".env"
+    path.write_text("FIRST=file\nSECOND=file\n", encoding="utf-8")
+    env = {"FIRST": "shell"}
+
+    assert load_dotenv(path, env=env) is True
+    assert env == {"FIRST": "shell", "SECOND": "file"}
+
+    assert load_dotenv(path, env=env, override=True) is True
+    assert env == {"FIRST": "file", "SECOND": "file"}
+
+
+def test_load_dotenv_missing_file_is_not_an_error(tmp_path: Path) -> None:
+    env = {"UNCHANGED": "yes"}
+
+    assert load_dotenv(tmp_path / "missing.env", env=env) is False
+    assert env == {"UNCHANGED": "yes"}
+
+
+def test_load_dotenv_defaults_to_the_working_directory_and_os_environ(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("DOTENV_SHELL_WINS=file\n", encoding="utf-8")
+    monkeypatch.setenv("DOTENV_SHELL_WINS", "shell")
+
+    assert load_dotenv() is True
+    assert os.environ["DOTENV_SHELL_WINS"] == "shell"
+
+
+def test_load_dotenv_reads_a_directory_as_an_error(tmp_path: Path) -> None:
+    directory = tmp_path / ".env"
+    directory.mkdir()
+
+    with pytest.raises(ConfigError, match="cannot read environment file"):
+        load_dotenv(directory, env={})
+
+
+def test_load_dotenv_rejects_invalid_utf8(tmp_path: Path) -> None:
+    path = tmp_path / ".env"
+    path.write_bytes(b"\xff\xfe")
+
+    with pytest.raises(ConfigError, match="not valid UTF-8"):
+        load_dotenv(path, env={})
+
+
+@pytest.mark.parametrize(
+    ("body", "match"),
+    [
+        ("NO_EQUALS\n", "expected KEY=VALUE"),
+        ("=value\n", "invalid environment variable name"),
+        ("1BAD=value\n", "invalid environment variable name"),
+        ('A="unterminated\n', "unterminated"),
+        ('A="bad\\q"\n', r"unsupported escape \\q"),
+        ('A="value" trailing\n', "unexpected text"),
+        ('A="bad\\\n', "unterminated escape"),
+    ],
+)
+def test_load_dotenv_rejects_malformed_lines(
+    tmp_path: Path, body: str, match: str
+) -> None:
+    path = tmp_path / ".env"
+    path.write_text(body, encoding="utf-8")
+
+    with pytest.raises(ConfigError, match=match):
+        load_dotenv(path, env={})
+
+
+def test_load_dotenv_errors_do_not_echo_secret_values(tmp_path: Path) -> None:
+    path = tmp_path / ".env"
+    path.write_text("sk-do-not-print-me\n", encoding="utf-8")
+
+    with pytest.raises(ConfigError) as caught:
+        load_dotenv(path, env={})
+
+    assert "sk-do-not-print-me" not in str(caught.value)
+    assert "expected KEY=VALUE" in str(caught.value)
+
+
+def test_load_dotenv_validates_every_line_before_setting_anything(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / ".env"
+    path.write_text("GOOD=value\nBROKEN\n", encoding="utf-8")
+    env: dict[str, str] = {}
+
+    with pytest.raises(ConfigError, match="expected KEY=VALUE"):
+        load_dotenv(path, env=env)
+
+    assert env == {}

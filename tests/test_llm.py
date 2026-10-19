@@ -1110,10 +1110,22 @@ def test_main_prints_the_completion(
             )
         ]
     )
-    monkeypatch.setattr(llm, "load_config", lambda: make_config())
+    order: list[str] = []
+
+    def fake_load_dotenv() -> None:
+        order.append("dotenv")
+
+    def fake_load_config() -> LLMConfig:
+        order.append("config")
+        return make_config()
+
+    monkeypatch.setattr(llm, "load_dotenv", fake_load_dotenv)
+    monkeypatch.setattr(llm, "load_config", fake_load_config)
     monkeypatch.setattr(llm, "make_client", lambda cfg: fake)
 
     assert llm.main(["say hi"]) == 0
+
+    assert order == ["dotenv", "config"]
 
     out = capsys.readouterr().out
     assert "provider: fake" in out
@@ -1136,6 +1148,7 @@ def test_main_reports_expected_failures_on_stderr(
     def raise_failure(*args: object, **kwargs: object) -> object:
         raise failure
 
+    monkeypatch.setattr(llm, "load_dotenv", lambda: None)
     monkeypatch.setattr(llm, "load_config", lambda: make_config())
     monkeypatch.setattr(llm, "make_client", raise_failure)
 

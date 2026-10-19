@@ -23,7 +23,7 @@ from typing import Any, Protocol, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
-from .config import ConfigError, LLMConfig, Strategy, load_config
+from .config import ConfigError, LLMConfig, Strategy, load_config, load_dotenv
 
 Message = dict[str, str]
 JsonBody = dict[str, Any]
@@ -794,6 +794,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("prompt", help="user prompt to send")
     args = parser.parse_args(argv)
     try:
+        load_dotenv()
         client = make_client(load_config())
         completion = client.complete([{"role": "user", "content": args.prompt}])
     except (ConfigError, LLMError) as exc:

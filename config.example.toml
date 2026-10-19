@@ -1,9 +1,11 @@
 # Copy this file to config.toml (gitignored) and set a real model name.
 #
-# The API key never belongs in this file.  Export the environment variable
-# named by api_key_env (GEMINI_API_KEY by default) in your shell:
+# The API key never belongs in this file.  Put it in .env (gitignored), which
+# both `python -m harness` and `python -m harness.llm` load automatically:
 #
-#   export GEMINI_API_KEY="..."
+#   ANTHROPIC_API_KEY=...
+#
+# A real shell export always wins over .env.  See .env.example.
 #
 # Gemini's free tier returns HTTP 429 when its per-minute or per-day quota is
 # exhausted.  The harness retries 429s with exponential backoff and honors
@@ -29,6 +31,9 @@ model = "REPLACE_ME"
 # non-default temperature values, so leave this commented out for them.
 # temperature = 0.0
 
+# Cap for one response, in tokens.  This is model-specific; 4096 is only a
+# conservative starting point.  Raise it when output is truncated, and stay at
+# or below the model's maximum (Claude Sonnet 5.5 supports 128000).
 max_output_tokens = 4096
 timeout_s = 120
 
@@ -55,3 +60,4 @@ log_path = "runs/llm_calls.jsonl"
 # provider = "anthropic"
 # model = "REPLACE_ME"
 # structured = "prompt"   # Anthropic has no JSON mode
+# Set max_output_tokens above to 128000 for Claude Sonnet 5.5 (its maximum).

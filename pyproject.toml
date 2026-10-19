@@ -22,6 +22,9 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["harness"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"harness/static" = "harness/static"
+
 [tool.pytest.ini_options]
 addopts = [
     "--strict-config",

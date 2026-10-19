@@ -12,4 +12,7 @@ build/
 .DS_Store
 .idea/
 config.toml
+.env
+.env.*
+!.env.example
 runs/

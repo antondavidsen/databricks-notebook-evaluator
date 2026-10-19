@@ -17,7 +17,7 @@ from .compose import (
     compose_documents,
     render_markdown,
 )
-from .config import load_config
+from .config import load_config, load_dotenv
 from .extract import Claim, Ledger, extract_claims, plan_chunks
 from .facts import StaticFacts, extract_facts, render_facts_for_prompt
 from .llm import FakeLLM, LLMClient, make_client
@@ -74,6 +74,7 @@ __all__ = [
     "find_citations",
     "format_citation",
     "load_config",
+    "load_dotenv",
     "make_client",
     "numbered_listing",
     "parse_citation",

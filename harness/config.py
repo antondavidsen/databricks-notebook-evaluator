@@ -8,8 +8,9 @@ of an environment variable, which keeps a config file safe to share.
 from __future__ import annotations
 
 import os
+import re
 import tomllib
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
@@ -110,6 +111,108 @@ def _temperature(value: object) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ConfigError(f"llm.temperature must be a number, got {value!r}")
     return float(value)
+
+
+_DOTENV_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+_DOTENV_ESCAPES = {
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+    '"': '"',
+    "\\": "\\",
+}
+
+
+def _dotenv_value(raw: str, path: Path, line: int) -> str:
+    """Parse one value: quoted, unquoted, or empty, with inline comments."""
+    value = raw.strip()
+    if not value:
+        return ""
+    quote = value[0]
+    if quote in {'"', "'"}:
+        characters: list[str] = []
+        index = 1
+        while index < len(value):
+            character = value[index]
+            if character == quote:
+                rest = value[index + 1 :].strip()
+                if rest and not rest.startswith("#"):
+                    raise ConfigError(
+                        f"{path}:{line}: unexpected text after the closing quote"
+                    )
+                return "".join(characters)
+            if quote == '"' and character == "\\":
+                index += 1
+                if index == len(value):
+                    raise ConfigError(f"{path}:{line}: unterminated escape")
+                escaped = value[index]
+                if escaped not in _DOTENV_ESCAPES:
+                    raise ConfigError(f"{path}:{line}: unsupported escape \\{escaped}")
+                characters.append(_DOTENV_ESCAPES[escaped])
+            else:
+                characters.append(character)
+            index += 1
+        raise ConfigError(f"{path}:{line}: unterminated {quote} quote")
+    for index, character in enumerate(value):
+        if character == "#" and (index == 0 or value[index - 1].isspace()):
+            return value[:index].rstrip()
+    return value
+
+
+def _parse_dotenv(text: str, path: Path) -> dict[str, str]:
+    """Parse KEY=VALUE lines without shell expansion or command execution."""
+    values: dict[str, str] = {}
+    for number, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export"):
+            remainder = line[len("export") :]
+            if remainder[:1].isspace():
+                line = remainder.lstrip()
+        key, separator, raw_value = line.partition("=")
+        if not separator:
+            raise ConfigError(f"{path}:{number}: expected KEY=VALUE")
+        key = key.strip()
+        if not _DOTENV_KEY.fullmatch(key):
+            raise ConfigError(f"{path}:{number}: invalid environment variable name")
+        values[key] = _dotenv_value(raw_value, path, number)
+    return values
+
+
+def load_dotenv(
+    path: str | os.PathLike[str] | None = None,
+    *,
+    env: MutableMapping[str, str] | None = None,
+    override: bool = False,
+) -> bool:
+    """Load ``.env`` into the process environment and report whether it existed.
+
+    Existing variables win by default, so a real shell export always beats a
+    file.  ``env`` is injectable for tests; values are never expanded, and a
+    missing file is intentionally not an error.
+    """
+    environ: MutableMapping[str, str] = os.environ if env is None else env
+    dotenv_path = Path(".env" if path is None else path)
+    try:
+        raw = dotenv_path.read_bytes()
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise ConfigError(
+            f"{dotenv_path}: cannot read environment file ({exc})"
+        ) from exc
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ConfigError(
+            f"{dotenv_path}: environment file is not valid UTF-8"
+        ) from exc
+
+    for key, value in _parse_dotenv(text, dotenv_path).items():
+        if override or key not in environ:
+            environ[key] = value
+    return True
 
 
 def load_config(
