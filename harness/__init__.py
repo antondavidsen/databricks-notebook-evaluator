@@ -25,6 +25,7 @@ from .models import (
     ParseResult,
     UnsupportedFormatError,
 )
+from .verify import VerifiedClaim, VerifiedLedger, verify_claim, verify_ledger
 
 if TYPE_CHECKING:
     from .parser import parse_file, parse_text
@@ -55,6 +56,8 @@ __all__ = [
     "ParseResult",
     "StaticFacts",
     "UnsupportedFormatError",
+    "VerifiedClaim",
+    "VerifiedLedger",
     "extract_claims",
     "extract_facts",
     "find_citations",
@@ -68,4 +71,6 @@ __all__ = [
     "plan_chunks",
     "render_facts_for_prompt",
     "validate_citation",
+    "verify_claim",
+    "verify_ledger",
 ]
