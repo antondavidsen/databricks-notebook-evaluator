@@ -10,6 +10,7 @@ from .citations import (
     parse_citation,
     validate_citation,
 )
+from .facts import StaticFacts, extract_facts, render_facts_for_prompt
 from .models import (
     Cell,
     CellKind,
@@ -45,12 +46,15 @@ __all__ = [
     "NotebookError",
     "NotebookFormatError",
     "ParseResult",
+    "StaticFacts",
     "UnsupportedFormatError",
+    "extract_facts",
     "find_citations",
     "format_citation",
     "numbered_listing",
     "parse_citation",
     "parse_file",
     "parse_text",
+    "render_facts_for_prompt",
     "validate_citation",
 ]
