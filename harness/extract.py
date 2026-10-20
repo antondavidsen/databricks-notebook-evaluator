@@ -7,7 +7,6 @@ too-long answer from losing the rest of a run: only the affected region shrinks.
 
 from __future__ import annotations
 
-import secrets
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Literal, Protocol, Self, TypeVar
@@ -16,6 +15,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from .citations import Citation, numbered_listing
 from .facts import StaticFacts, render_facts_for_prompt
+from .grounding import DOCUMENTABLE_KINDS, marker_token
 from .llm import (
     LLMResponseError,
     LLMTransientError,
@@ -36,9 +36,6 @@ Tag = Literal[
     "not_visible",
 ]
 
-_DOCUMENTABLE = frozenset(
-    {CellKind.PYTHON, CellKind.SQL, CellKind.RUN, CellKind.MAGIC_OTHER}
-)
 _CONTEXT_LINE_LIMIT = 40
 _OMIT_REASON = "output too long for one cell"
 
@@ -231,7 +228,7 @@ def plan_chunks(
     current: list[int] = []
     used_lines = 0
     for cell in result.cells:
-        if cell.kind not in _DOCUMENTABLE:
+        if cell.kind not in DOCUMENTABLE_KINDS:
             continue
         size = len(cell.lines)
         too_many = len(current) >= max_cells
@@ -298,14 +295,6 @@ def build_messages(
     ]
 
 
-def _token_for(text: str) -> str:
-    """Regenerate until the notebook text cannot contain the closing marker."""
-    token = secrets.token_hex(4)
-    while token in text:
-        token = secrets.token_hex(4)
-    return token
-
-
 def _normalized(text: str) -> str:
     return " ".join(text.lower().split())
 
@@ -336,7 +325,7 @@ class _Run:
     _kept: set[tuple[str, tuple[int, int, int], str]] = field(default_factory=set)
 
     def process(self, chunk: Chunk, number: int) -> None:
-        token = _token_for(_listing_body(self.result, chunk))
+        token = marker_token(_listing_body(self.result, chunk))
         messages = build_messages(self.result, chunk, self.facts, token)
         try:
             output = self.client.generate(messages, ChunkOutput)
@@ -411,7 +400,7 @@ def extract_claims(
     uncovered = tuple(
         cell.number
         for cell in result.cells
-        if cell.kind in _DOCUMENTABLE
+        if cell.kind in DOCUMENTABLE_KINDS
         and cell.number not in failed
         and cell.number not in cited
     )

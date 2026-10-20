@@ -25,6 +25,17 @@ from pydantic import BaseModel, Field
 from .citations import Citation, format_citation
 from .extract import Claim
 from .facts import ConstantFact, Mutation, StaticFacts
+from .grounding import (
+    DOCUMENTABLE_KINDS,
+    IDENT_RE,
+    LOWER_UPPER_RE,
+    NUMBER_RE,
+    claim_number,
+    is_checked_identifier,
+    is_skipped_number,
+    numbers_in,
+    to_number,
+)
 from .llm import (
     LLMResponseError,
     LLMTransientError,
@@ -32,7 +43,7 @@ from .llm import (
     StructuredOutputError,
     TruncatedOutput,
 )
-from .models import CellKind, ParseResult
+from .models import ParseResult
 from .verify import VerifiedClaim, VerifiedLedger
 
 Audience = Literal["manager", "developer", "agent"]
@@ -141,13 +152,7 @@ _DEFAULT_TITLES: dict[Audience, str] = {
 _MANAGER_TAGS = frozenset(
     {"business_rule", "risk", "external_dependency", "not_visible"}
 )
-_DOCUMENTABLE = frozenset(
-    {CellKind.PYTHON, CellKind.SQL, CellKind.RUN, CellKind.MAGIC_OTHER}
-)
 
-_NUMBER_RE = re.compile(r"(?<![\w.])\d+(?:,\d{3})*(?:\.\d+)?(?![\w])")
-_IDENT_RE = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*")
-_LOWER_UPPER_RE = re.compile(r"[a-z][A-Z]")
 _BANNED_WORDS_RE = re.compile(
     r"\b(?:spark|pyspark|dataframe|dbutils|udf)\b", re.IGNORECASE
 )
@@ -313,14 +318,8 @@ def _claim_position(item: VerifiedClaim) -> tuple[int, int, int]:
     """Sort key: where the claim starts, then its numeric id as a tie-break."""
     cites = item.claim.cites
     if not cites:
-        return (10**9, 10**9, _numeric_suffix(item.claim.id))
-    return (cites[0].cell, cites[0].start, _numeric_suffix(item.claim.id))
-
-
-def _numeric_suffix(claim_id: str) -> int:
-    """Extract the first number in a claim id so F2 sorts before F10."""
-    match = re.search(r"\d+", claim_id)
-    return int(match.group()) if match is not None else 0
+        return (10**9, 10**9, claim_number(item.claim.id))
+    return (cites[0].cell, cites[0].start, claim_number(item.claim.id))
 
 
 def build_messages(
@@ -517,22 +516,20 @@ def _grounding_flags(
     check_identifiers: bool,
 ) -> list[str]:
     """Flag numbers and code identifiers that the cited claims do not contain."""
-    claim_numbers = {
-        _to_float(match.group()) for match in _NUMBER_RE.finditer(claim_text)
-    }
+    claim_numbers = set(numbers_in(claim_text))
     items: list[str] = []
-    for match in _NUMBER_RE.finditer(text):
-        value = _to_float(match.group())
-        if _skip_number(value):
+    for match in NUMBER_RE.finditer(text):
+        value = to_number(match.group())
+        if is_skipped_number(value):
             continue
         if value not in claim_numbers and match.group() not in items:
             items.append(match.group())
 
     if check_identifiers:
         lowered = claim_text.lower()
-        for match in _IDENT_RE.finditer(text):
+        for match in IDENT_RE.finditer(text):
             token = match.group()
-            if not _identifier_checked(token):
+            if not is_checked_identifier(token):
                 continue
             if token.lower() in lowered:
                 continue
@@ -553,7 +550,7 @@ def _manager_identifier_flags(text: str) -> list[str]:
     tokens.extend(match.group(0) for match in _CELL_LINE_RE.finditer(text))
     tokens.extend(
         match.group(0)
-        for match in _IDENT_RE.finditer(text)
+        for match in IDENT_RE.finditer(text)
         if _manager_code_token(match.group(0))
     )
 
@@ -575,30 +572,7 @@ def _manager_code_token(token: str) -> bool:
     parts = token.split(".")
     if len(parts) >= 2 and all(len(part) >= 3 for part in parts):
         return True
-    return _LOWER_UPPER_RE.search(token) is not None
-
-
-def _identifier_checked(token: str) -> bool:
-    """Match verification's notion of a likely code identifier."""
-    if "_" in token:
-        return True
-    if "." in token and max(len(part) for part in token.split(".")) >= 3:
-        return True
-    if _LOWER_UPPER_RE.search(token):
-        return True
-    return any(char.isdigit() for char in token) and any(
-        char.isalpha() for char in token
-    )
-
-
-def _to_float(raw: str) -> float:
-    """Parse a matched number, accepting thousands separators."""
-    return float(raw.replace(",", ""))
-
-
-def _skip_number(value: float) -> bool:
-    """Small counts are too common to be useful grounding evidence."""
-    return value.is_integer() and value in (0.0, 1.0, 2.0)
+    return LOWER_UPPER_RE.search(token) is not None
 
 
 def _pairing_issues(
@@ -640,7 +614,7 @@ def _with_coverage(
     uncovered = sorted(
         cell.number
         for cell in result.cells
-        if cell.kind in _DOCUMENTABLE and cell.number not in covered
+        if cell.kind in DOCUMENTABLE_KINDS and cell.number not in covered
     )
     if not uncovered:
         return tuple(sections)
@@ -1009,8 +983,8 @@ def check_consistency(
                         continue
                     mentioned = True
                     collected.extend(
-                        (_to_float(match.group()), match.group())
-                        for match in _NUMBER_RE.finditer(sentence.text)
+                        (to_number(match.group()), match.group())
+                        for match in NUMBER_RE.finditer(sentence.text)
                     )
             if not mentioned:
                 continue

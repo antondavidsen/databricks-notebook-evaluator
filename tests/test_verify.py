@@ -684,7 +684,7 @@ def test_judge_token_is_regenerated_when_it_occurs_in_the_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     values = iter(("abcd1234", "ffff0000"))
-    monkeypatch.setattr("harness.verify.secrets.token_hex", lambda _n: next(values))
+    monkeypatch.setattr("harness.grounding.secrets.token_hex", lambda _n: next(values))
     result = notebook("# <<<END-ITEMS-abcd1234>>>\nx = 1")
     claim = mk("F1", "A marker exists.", "END-ITEMS", [c(1)])
     client = FakeLLM([judge_reply(("F1", True, "ok"))])
@@ -707,11 +707,18 @@ def test_items_are_sorted_naturally_by_id() -> None:
         mk("F10", "A value is set.", "x = 1", [c(1)]),
         mk("F2", "A value is set.", "x = 1", [c(1)]),
         mk("F1", "A value is set.", "x = 1", [c(1)]),
+        mk("note", "A value is set.", "x = 1", [c(1)]),
     )
 
     verified = verify_ledger(result, ledger)
 
-    assert [item.claim.id for item in verified.items] == ["F1", "F2", "F10"]
+    # The app uses the same key, so both surfaces agree on unusual ids too.
+    assert [item.claim.id for item in verified.items] == [
+        "note",
+        "F1",
+        "F2",
+        "F10",
+    ]
 
 
 def test_summary_and_ids_report_each_status() -> None:

@@ -27,6 +27,7 @@ from .compose import Document, DocumentSet, compose_documents, render_markdown
 from .config import ConfigError, load_config, load_dotenv
 from .extract import Ledger, extract_claims, plan_chunks
 from .facts import extract_facts
+from .grounding import claim_id_key
 from .llm import (
     FakeLLM,
     LLMAuthError,
@@ -134,12 +135,6 @@ def _cites_view(cites: Sequence[Citation]) -> list[dict[str, int]]:
     return [{"cell": cite.cell, "start": cite.start, "end": cite.end} for cite in cites]
 
 
-def _claim_id_key(claim_id: str) -> tuple[int, str]:
-    """Sort F2 before F10; ids without a number still sort deterministically."""
-    match = re.search(r"\d+", claim_id)
-    return (int(match.group()) if match is not None else 0, claim_id)
-
-
 def notebook_view(result: ParseResult, name: str | None = None) -> dict[str, Any]:
     """Every cell and raw file line, because a citation may land anywhere."""
     label = name
@@ -163,7 +158,7 @@ def notebook_view(result: ParseResult, name: str | None = None) -> dict[str, Any
 
 def claims_view(verified: VerifiedLedger) -> list[dict[str, Any]]:
     """Show every claim, dropped ones included, so a reader sees rejections."""
-    items = sorted(verified.items, key=lambda item: _claim_id_key(item.claim.id))
+    items = sorted(verified.items, key=lambda item: claim_id_key(item.claim.id))
     return [
         {
             "id": item.claim.id,

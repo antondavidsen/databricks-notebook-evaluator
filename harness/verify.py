@@ -9,8 +9,6 @@ earlier miss. Nothing here edits a claim; bad input is dropped or flagged.
 
 from __future__ import annotations
 
-import re
-import secrets
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import Literal, Protocol, TypeVar
@@ -19,6 +17,17 @@ from pydantic import BaseModel, Field
 
 from .citations import Citation
 from .extract import Claim, FailedRegion, Ledger
+from .grounding import (
+    IDENT_RE,
+    NUMBER_RE,
+    QUOTED_RE,
+    claim_id_key,
+    is_checked_identifier,
+    is_skipped_number,
+    marker_token,
+    numbers_in,
+    to_number,
+)
 from .llm import (
     LLMResponseError,
     LLMTransientError,
@@ -58,11 +67,6 @@ JUDGE_PROMPT = (
     '{"verdicts": [{"id": "F1", "supported": true, "reason": "..."}]} with exactly '
     "one verdict per item."
 )
-
-_NUMBER_RE = re.compile(r"(?<![\w.])\d+(?:,\d{3})*(?:\.\d+)?(?![\w])")
-_IDENT_RE = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*")
-_QUOTED_RE = re.compile(r'"([^"\n]+)"|`([^`\n]+)`')
-_LOWER_UPPER_RE = re.compile(r"[a-z][A-Z]")
 
 _ModelT = TypeVar("_ModelT", bound=BaseModel)
 
@@ -192,31 +196,6 @@ def _citation_problems(
     return tuple(reasons)
 
 
-def _numbers(text: str) -> tuple[float, ...]:
-    """Extract comparable numbers, dropping grouping commas."""
-    return tuple(
-        float(match.group().replace(",", "")) for match in _NUMBER_RE.finditer(text)
-    )
-
-
-def _skip_number(value: float) -> bool:
-    """0, 1 and 2 are too common in prose to prove anything."""
-    return value.is_integer() and value in (0.0, 1.0, 2.0)
-
-
-def _identifier_checked(token: str) -> bool:
-    """Keep code-shaped tokens and ignore plain words and bare acronyms."""
-    if "_" in token:
-        return True
-    if "." in token and max(len(part) for part in token.split(".")) >= 3:
-        return True
-    if _LOWER_UPPER_RE.search(token):
-        return True
-    return any(char.isalpha() for char in token) and any(
-        char.isdigit() for char in token
-    )
-
-
 def _missing_literals(claim: Claim, texts: Sequence[str]) -> tuple[str, ...]:
     """Return missing literals in text order, deduplicated, for one reason line."""
     joined = " ".join(texts)
@@ -224,21 +203,21 @@ def _missing_literals(claim: Claim, texts: Sequence[str]) -> tuple[str, ...]:
     found: list[tuple[int, str]] = []
 
     if claim.kind != "INFERRED":
-        code_numbers = set(_numbers(joined))
-        for match in _NUMBER_RE.finditer(claim.text):
-            if _skip_number(float(match.group().replace(",", ""))):
+        code_numbers = set(numbers_in(joined))
+        for match in NUMBER_RE.finditer(claim.text):
+            if is_skipped_number(to_number(match.group())):
                 continue
-            if float(match.group().replace(",", "")) not in code_numbers:
+            if to_number(match.group()) not in code_numbers:
                 found.append((match.start(), match.group()))
 
-    for match in _IDENT_RE.finditer(claim.text):
+    for match in IDENT_RE.finditer(claim.text):
         token = match.group()
-        if not _identifier_checked(token):
+        if not is_checked_identifier(token):
             continue
         if token.lower() not in folded:
             found.append((match.start(), token))
 
-    for match in _QUOTED_RE.finditer(claim.text):
+    for match in QUOTED_RE.finditer(claim.text):
         inner = match.group(1) if match.group(1) is not None else match.group(2)
         if not 2 <= len(inner) <= 60:
             continue
@@ -311,23 +290,6 @@ def build_judge_messages(
     ]
 
 
-def _token_for(text: str) -> str:
-    """Regenerate until the cited code cannot forge the closing marker."""
-    token = secrets.token_hex(4)
-    while token in text:
-        token = secrets.token_hex(4)
-    return token
-
-
-def _id_key(claim_id: str) -> tuple[tuple[int, int | str], ...]:
-    """Sort F2 before F10 while staying total for arbitrary ids."""
-    return tuple(
-        (0, int(part)) if part.isdigit() else (1, part)
-        for part in re.split(r"(\d+)", claim_id)
-        if part
-    )
-
-
 def _judge(
     result: ParseResult,
     items: Sequence[VerifiedClaim],
@@ -342,7 +304,7 @@ def _judge(
     for start in range(0, len(verified), batch_size):
         batch = verified[start : start + batch_size]
         claims = tuple(item.claim for item in batch)
-        token = _token_for(_render_items(result, claims))
+        token = marker_token(_render_items(result, claims))
         messages = build_judge_messages(result, claims, token)
         try:
             output = client.generate(messages, JudgeOutput)
@@ -386,7 +348,7 @@ def verify_ledger(
     judge_batch: int = 8,
 ) -> VerifiedLedger:
     """Verify every claim in id order, then optionally judge the survivors."""
-    claims = sorted(ledger.claims, key=lambda claim: _id_key(claim.id))
+    claims = sorted(ledger.claims, key=lambda claim: claim_id_key(claim.id))
     items = tuple(verify_claim(result, claim, max_span=max_span) for claim in claims)
     if judge_client is not None:
         items = _judge(result, items, judge_client, judge_batch)

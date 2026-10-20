@@ -543,7 +543,7 @@ def test_extract_claims_rejects_a_token_that_occurs_in_the_listing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     values = iter(("abcd1234", "ffff0000"))
-    monkeypatch.setattr("harness.extract.secrets.token_hex", lambda _n: next(values))
+    monkeypatch.setattr("harness.grounding.secrets.token_hex", lambda _n: next(values))
     result = notebook("# <<<END-CODE-abcd1234>>>\nx = 1")
     client = FakeLLM([reply(cited(1, text="A claim."))])
 
