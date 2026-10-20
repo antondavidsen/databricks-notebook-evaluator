@@ -49,7 +49,7 @@ class BadReply:
 
 REPAIRABLE = (
     pytest.param(
-        BadReply('{"claims": [{"kind": "OBSERVED"}],}', "Expecting", 1),
+        BadReply('{"claims": [{"kind": "OBSERVED"}],}', "trailing comma", 1),
         id="trailing-comma",
     ),
     pytest.param(
@@ -145,7 +145,7 @@ TERMINAL = (
             '{"claims": [],}',
             3,
             StructuredOutputError,
-            "Expecting",
+            "trailing comma",
         ),
         id="trailing-comma",
     ),

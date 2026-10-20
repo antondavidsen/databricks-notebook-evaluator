@@ -13,7 +13,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.15"]
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,16 +28,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install the project and dev dependencies
-        run: uv sync --all-extras
+        run: make sync
 
-      - name: Lint (ruff)
-        run: uv run ruff check harness tests
-
-      - name: Verify formatting (ruff)
-        run: uv run ruff format --check harness tests
-
-      - name: Type check (mypy)
-        run: uv run mypy harness tests
-
-      - name: Test (pytest with coverage)
-        run: uv run pytest
+      - name: Quality gate
+        run: make ci

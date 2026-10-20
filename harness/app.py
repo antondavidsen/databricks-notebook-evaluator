@@ -475,7 +475,7 @@ def _handler_class(
                     return
                 try:
                     text = sample.read_bytes().decode("utf-8")
-                except (OSError, UnicodeDecodeError):
+                except OSError, UnicodeDecodeError:
                     self._send_json(
                         404, {"error": "The sample notebook could not be read."}
                     )
@@ -527,7 +527,7 @@ def _handler_class(
             raw = self.rfile.read(length)
             try:
                 payload: object = json.loads(raw)
-            except (UnicodeDecodeError, json.JSONDecodeError):
+            except UnicodeDecodeError, json.JSONDecodeError:
                 self._send_json(400, {"error": "The request body is not valid JSON."})
                 return
             if not isinstance(payload, dict):

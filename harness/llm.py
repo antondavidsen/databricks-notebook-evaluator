@@ -19,7 +19,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol, TypeVar, cast
+from typing import Any, Protocol, cast
 
 from pydantic import BaseModel, ValidationError
 
@@ -388,9 +388,6 @@ def _adapter(cfg: LLMConfig, api_key: str | None) -> _Adapter:
     return _OpenAIAdapter(cfg, api_key, token_field)
 
 
-_ModelT = TypeVar("_ModelT", bound=BaseModel)
-
-
 def _elapsed_ms(started: float) -> int:
     return max(0, round((time.monotonic() - started) * 1000))
 
@@ -464,11 +461,11 @@ class LLMClient:
         """Send one conversation and return a parsed Completion."""
         return self._complete(messages, json_mode=json_mode, attempt=1)
 
-    def generate(
+    def generate[ModelT: BaseModel](
         self,
         messages: Sequence[Message],
-        schema: type[_ModelT],
-    ) -> _ModelT:
+        schema: type[ModelT],
+    ) -> ModelT:
         """Return a validated instance, repairing bad JSON a bounded number of times."""
         structured_attempt = 0
 
@@ -702,16 +699,16 @@ def _noop() -> None:
     """Default repair callback: counting is optional for direct callers."""
 
 
-def _generate_structured(
+def _generate_structured[ModelT: BaseModel](
     complete: Callable[[Sequence[Message], bool], Completion],
     messages: Sequence[Message],
-    schema: type[_ModelT],
+    schema: type[ModelT],
     *,
     repair_retries: int,
     strategy: Strategy,
     scrub: Callable[[str], str],
     on_repair: Callable[[], None] = _noop,
-) -> _ModelT:
+) -> ModelT:
     """Shared structured path so the fake and the real client behave alike."""
     instruction = _schema_instruction(schema)
     conversation = [dict(message) for message in messages]
@@ -807,11 +804,11 @@ class FakeLLM:
             model=self.model,
         )
 
-    def generate(
+    def generate[ModelT: BaseModel](
         self,
         messages: Sequence[Message],
-        schema: type[_ModelT],
-    ) -> _ModelT:
+        schema: type[ModelT],
+    ) -> ModelT:
         return _generate_structured(
             lambda next_messages, json_mode: self.complete(
                 next_messages, json_mode=json_mode

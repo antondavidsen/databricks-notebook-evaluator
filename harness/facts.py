@@ -212,7 +212,7 @@ def _cite(cell: int, node: ast.AST) -> Citation:
 def _literal(node: ast.expr) -> tuple[bool, object]:
     try:
         return True, ast.literal_eval(node)
-    except (ValueError, SyntaxError, TypeError):
+    except ValueError, SyntaxError, TypeError:
         return False, None
 
 

@@ -814,8 +814,11 @@ def test_malformed_request_line_gets_a_json_error(tmp_path: Path) -> None:
             pass
 
     raw = b"".join(chunks)
-    assert raw.startswith(b'{"error"')
-    assert b"Bad request syntax" in raw
+    # CPython 3.15.0rc1+ sends a status line and headers even for malformed
+    # request lines (gh-54930); older builds send the bare JSON body.
+    body = raw.split(b"\r\n\r\n", 1)[-1]
+    assert body.startswith(b'{"error"')
+    assert b"Bad request syntax" in body
 
 
 def test_module_entry_point_reexports_main() -> None:
