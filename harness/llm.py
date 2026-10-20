@@ -430,6 +430,12 @@ class LLMClient:
         self._adapter = _adapter(cfg, api_key)
         self._transport = transport
         self._sleep = sleep
+        # Count schema repairs across a run; only the caller knows the baseline.
+        self.repair_attempts = 0
+
+    def _note_repair(self) -> None:
+        """Record one malformed or schema-invalid reply that was retried."""
+        self.repair_attempts += 1
 
     @property
     def provider(self) -> str:
@@ -480,6 +486,7 @@ class LLMClient:
             repair_retries=self._cfg.repair_retries,
             strategy=self.strategy,
             scrub=self._scrub,
+            on_repair=self._note_repair,
         )
 
     def _complete(
@@ -632,23 +639,44 @@ def make_client(
     )
 
 
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate object keys; last-wins would silently hide a bad reply."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f'duplicate key "{key}" in JSON object')
+        result[key] = value
+    return result
+
+
 def extract_json_object(text: str) -> dict[str, Any]:
     """Find the first JSON object in a reply, tolerating fences and prose.
 
     Starting at each ``{`` and asking ``raw_decode`` for one complete value is
     what rejects junk like ``{ref}`` before a later, real object.  A greedy
     regex cannot recover from that case (and can swallow trailing prose).
+    Duplicate keys are rejected rather than resolved last-wins: a model that
+    emits the same field twice is ambiguous and must repair the reply.
     """
-    decoder = json.JSONDecoder()
+    decoder = json.JSONDecoder(object_pairs_hook=_reject_duplicate_keys)
+    last_error: json.JSONDecodeError | None = None
+    skip_until = -1
     for index, character in enumerate(text):
-        if character != "{":
+        if character != "{" or index <= skip_until:
             continue
         try:
             value, _ = decoder.raw_decode(text[index:])
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            # Do not fall back to an object nested inside a malformed outer one:
+            # ``{"claims": [{"kind": "OBSERVED"}],}`` must repair, not accept the
+            # inner claim as the whole reply.
+            last_error = exc
+            skip_until = index + exc.pos
             continue
         return cast(dict[str, Any], value)
-    raise ValueError("no JSON object found")
+    if last_error is None:
+        raise ValueError("no JSON object found")
+    raise ValueError(f"no JSON object found: {last_error.msg}")
 
 
 def _schema_instruction(schema: type[BaseModel]) -> str:
@@ -670,6 +698,10 @@ def _error_summary(exc: ValueError) -> str:
     return str(exc)
 
 
+def _noop() -> None:
+    """Default repair callback: counting is optional for direct callers."""
+
+
 def _generate_structured(
     complete: Callable[[Sequence[Message], bool], Completion],
     messages: Sequence[Message],
@@ -678,6 +710,7 @@ def _generate_structured(
     repair_retries: int,
     strategy: Strategy,
     scrub: Callable[[str], str],
+    on_repair: Callable[[], None] = _noop,
 ) -> _ModelT:
     """Shared structured path so the fake and the real client behave alike."""
     instruction = _schema_instruction(schema)
@@ -721,6 +754,7 @@ def _generate_structured(
                 },
             ]
             repairs_used += 1
+            on_repair()
 
 
 class FakeLLM:
@@ -737,6 +771,11 @@ class FakeLLM:
         self._responses = list(responses)
         self.strategy = strategy
         self.calls: list[dict[str, Any]] = []
+        self.repair_attempts = 0
+
+    def _note_repair(self) -> None:
+        """Mirror the real client so tests can assert on repair counts."""
+        self.repair_attempts += 1
 
     def complete(
         self,
@@ -782,6 +821,7 @@ class FakeLLM:
             repair_retries=2,
             strategy=self.strategy,
             scrub=lambda text: text,
+            on_repair=self._note_repair,
         )
 
 

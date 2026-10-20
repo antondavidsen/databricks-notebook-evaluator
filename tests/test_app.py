@@ -484,6 +484,16 @@ def test_run_rejects_bad_requests_before_starting_a_job(tmp_path: Path) -> None:
             server,
             "POST",
             "/api/run",
+            body=run_body(text='{"cells": []}', name="demo.ipynb"),
+            headers={"Content-Type": "application/json"},
+        )
+        assert status == 400
+        assert "Only .py notebooks" in decode(body)["error"]
+
+        status, _, body = call(
+            server,
+            "POST",
+            "/api/run",
             body=run_body(text=""),
             headers={"Content-Type": "application/json"},
         )
@@ -718,6 +728,18 @@ def test_run_pipeline_end_to_end_writes_every_output(tmp_path: Path) -> None:
         "dropped": 0,
         "used": 1,
     }
+    metrics = result["metrics"]
+    assert metrics["repairs"] == 0
+    assert metrics["strategy"] == "prompt"
+    assert metrics["ledger"] == {
+        "chunks": 1,
+        "extracted": 1,
+        "dropped_foreign": 0,
+        "dropped_duplicate": 0,
+    }
+    assert metrics["documents"]["manager"]["claim_coverage"] == 1.0
+    assert metrics["injection"] == []
+    assert "metrics: chunks=1 extracted=1" in metrics["line"]
     sentence = documents["manager"]["sections"][0]["sentences"][0]
     assert sentence["text"] == "The rate is set to 0.2."
     assert sentence["source"] == "claims"
@@ -737,6 +759,7 @@ def test_run_pipeline_end_to_end_writes_every_output(tmp_path: Path) -> None:
         "agent.md",
         "claims.json",
         "documents.json",
+        "metrics.json",
         "notebook.py",
     ):
         assert (run_dir / filename).is_file()
@@ -746,6 +769,7 @@ def test_run_pipeline_end_to_end_writes_every_output(tmp_path: Path) -> None:
         json.loads((run_dir / "documents.json").read_text(encoding="utf-8"))
         == documents
     )
+    assert json.loads((run_dir / "metrics.json").read_text(encoding="utf-8")) == metrics
     assert "The rate is set to 0.2." in (run_dir / "manager.md").read_text(
         encoding="utf-8"
     )

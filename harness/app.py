@@ -28,6 +28,7 @@ from .config import ConfigError, load_config, load_dotenv
 from .extract import Ledger, extract_claims, plan_chunks
 from .facts import extract_facts
 from .grounding import claim_id_key
+from .injection import scan_injection
 from .llm import (
     FakeLLM,
     LLMAuthError,
@@ -36,6 +37,7 @@ from .llm import (
     LLMTransientError,
     make_client,
 )
+from .metrics import RunMetrics, build_metrics
 from .models import ParseResult
 from .parser import parse_text
 from .verify import VerifiedLedger, verify_ledger
@@ -238,6 +240,7 @@ def _save_outputs(
     result: ParseResult,
     verified: VerifiedLedger,
     documents: DocumentSet,
+    metrics: RunMetrics,
     text: str,
     name: str,
     runs_dir: str | Path,
@@ -256,6 +259,7 @@ def _save_outputs(
         )
     _write_json(run_dir / "claims.json", claims_view(verified))
     _write_json(run_dir / "documents.json", documents_view(documents))
+    _write_json(run_dir / "metrics.json", metrics.to_dict())
     (run_dir / "notebook.py").write_bytes(text.encode("utf-8"))
     return run_dir
 
@@ -268,14 +272,17 @@ def run_pipeline(
     judge: bool,
     runs_dir: str | Path,
     set_stage: StageSetter,
+    emit: Callable[[str], None] = print,
 ) -> dict[str, Any]:
     """Run every stage in order and return only the explicit contract."""
     set_stage("Parsing notebook")
     result = parse_text(text, "py", name)
     facts = extract_facts(result)
+    injection = scan_injection(result)
 
     chunks = plan_chunks(result)
     set_stage("Extracting claims", 0, len(chunks))
+    repairs_before = client.repair_attempts
     ledger: Ledger = extract_claims(
         result,
         client,
@@ -289,11 +296,21 @@ def run_pipeline(
     set_stage("Writing the three documents")
     documents = compose_documents(result, verified, facts, client)
 
-    run_dir = _save_outputs(result, verified, documents, text, name, runs_dir)
+    metrics = build_metrics(
+        ledger,
+        verified,
+        documents,
+        repairs=client.repair_attempts - repairs_before,
+        strategy=client.strategy,
+        injection=injection,
+    )
+    run_dir = _save_outputs(result, verified, documents, metrics, text, name, runs_dir)
+    emit(metrics.line())
     return {
         "notebook": notebook_view(result, name),
         "documents": documents_view(documents),
         "claims": claims_view(verified),
+        "metrics": metrics.to_dict(),
         "run_dir": str(run_dir),
     }
 

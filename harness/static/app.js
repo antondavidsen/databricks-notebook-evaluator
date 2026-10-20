@@ -87,6 +87,10 @@ function renderSummary() {
     summary.dropped +
     " · used in documents " +
     summary.used;
+  const metrics = state.result.metrics;
+  const line = metrics && typeof metrics.line === "string" ? metrics.line : "";
+  el("metrics").textContent = line;
+  el("metrics").hidden = line === "";
 }
 
 function renderNotes() {

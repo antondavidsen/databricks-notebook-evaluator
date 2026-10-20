@@ -833,6 +833,7 @@ def test_generate_repairs_an_invalid_reply() -> None:
     )
 
     assert client.generate([user()], Verdict) == Verdict(answer="yes", score=9)
+    assert client.repair_attempts == 1
 
     repair = transport.calls[1][2]["messages"]
     assert repair[-2] == {"role": "assistant", "content": "not json"}
@@ -871,6 +872,7 @@ def test_generate_gives_up_after_the_configured_repairs() -> None:
     assert error.last_text == "wrong again"
     assert "after 2 attempts" in str(error)
     assert len(transport.calls) == 2
+    assert client.repair_attempts == 1
 
 
 def test_generate_raises_truncated_output_without_repairing() -> None:
