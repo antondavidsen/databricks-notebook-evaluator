@@ -23,6 +23,9 @@ You need Python 3.15+ and [uv](https://docs.astral.sh/uv/). Flags: `--port`, `--
 (offers a sample notebook you can run in one click), `--judge` (optional LLM judge), `--runs <dir>`
 (output directory, `runs` by default). `make test` runs the whole suite offline and needs no API key.
 
+`make run-judge` starts the same app with `--judge` enabled. The judge is one extra model call per
+eight verified claims, so expect roughly double the calls and the waiting time of a plain run.
+
 The provider goes in `config.toml`. The key never does. `api_key_env` is the name of the environment
 variable the tool should read it from.
 

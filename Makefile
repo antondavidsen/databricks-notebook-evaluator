@@ -1,9 +1,10 @@
-.PHONY: help sync run mypy test ruff format format-check lint ci clean
+.PHONY: help sync run run-judge mypy test ruff format format-check lint ci clean
 
 help:  ## Show available targets
 	@echo "Available targets:"
 	@echo "  make sync         Install/refresh the environment with uv"
 	@echo "  make run          Start the local harness app"
+	@echo "  make run-judge    Start the app with the LLM judge enabled (--judge)"
 	@echo "  make mypy         Run mypy type checker (strict)"
 	@echo "  make test         Run pytest with coverage"
 	@echo "  make ruff         Run ruff linter"
@@ -17,6 +18,9 @@ sync:
 
 run:
 	uv run python -m harness
+
+run-judge:
+	uv run python -m harness --judge
 
 mypy:
 	uv run mypy harness tests
