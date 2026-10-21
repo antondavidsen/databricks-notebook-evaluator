@@ -28,7 +28,7 @@ from harness.llm import (
     make_client,
     urllib_transport,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 Reply = tuple[int, dict[str, str], JsonBody]
 
@@ -820,7 +820,58 @@ def test_generate_extends_an_existing_system_message() -> None:
     assert [message["role"] for message in messages] == ["system", "user"]
     assert messages[0]["content"].startswith("be brief\n\nReply with ONE")
     assert messages[1] == user()
-    assert transport.calls[0][2]["response_format"] == {"type": "json_object"}
+    response_format = transport.calls[0][2]["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["name"] == "Verdict"
+    assert response_format["json_schema"]["strict"] is True
+    schema = response_format["json_schema"]["schema"]
+    assert schema == {
+        "additionalProperties": False,
+        "properties": {
+            "answer": {"title": "Answer", "type": "string"},
+            "score": {"title": "Score", "type": "integer"},
+        },
+        "required": ["answer", "score"],
+        "title": "Verdict",
+        "type": "object",
+    }
+
+
+def test_openai_json_mode_prunes_keywords_strict_mode_rejects() -> None:
+    class Inner(BaseModel):
+        value: int = Field(ge=1, le=5)
+
+    class Outer(BaseModel):
+        title: str = Field(default="x", min_length=1, max_length=10)
+        items: list[Inner] = Field(default_factory=list, max_length=3)
+
+    client, transport, _ = make_test_client(
+        make_config(provider="openai", strategy="json_mode"),
+        [openai_reply('{"title": "a", "items": [{"value": 2}]}')],
+    )
+
+    assert client.generate([user()], Outer) == Outer(title="a", items=[Inner(value=2)])
+
+    payload = transport.calls[0][2]["response_format"]["json_schema"]
+    assert payload["name"] == "Outer"
+    assert payload["strict"] is True
+    schema = payload["schema"]
+    assert schema["additionalProperties"] is False
+    assert schema["required"] == ["title", "items"]
+    inner = schema["$defs"]["Inner"]
+    assert inner["additionalProperties"] is False
+    assert inner["required"] == ["value"]
+    assert inner["properties"]["value"]["type"] == "integer"
+    text = json.dumps(schema)
+    for rejected in (
+        "maxLength",
+        "minLength",
+        "maxItems",
+        "minimum",
+        "maximum",
+        "default",
+    ):
+        assert rejected not in text
 
 
 def test_generate_repairs_an_invalid_reply() -> None:

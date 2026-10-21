@@ -176,9 +176,80 @@ def _optional_str(value: object) -> str | None:
     return None
 
 
+_STRICT_UNSUPPORTED_KEYWORDS = frozenset(
+    {
+        "$schema",
+        "default",
+        "examples",
+        "minLength",
+        "maxLength",
+        "pattern",
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "minItems",
+        "maxItems",
+        "uniqueItems",
+        "minProperties",
+        "maxProperties",
+    }
+)
+
+
+def _strict_json_schema(node: Any) -> Any:
+    """Copy a Pydantic JSON Schema into the subset strict mode accepts.
+
+    Strict structured output rejects validation keywords such as ``maxLength``
+    and requires every object to set ``additionalProperties: false`` and to
+    list every property as required.  The constraints still live in the
+    Pydantic model, which validates the reply locally.
+    """
+    if isinstance(node, list):
+        return [_strict_json_schema(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+    strict = {
+        key: _strict_json_schema(value)
+        for key, value in node.items()
+        if key not in _STRICT_UNSUPPORTED_KEYWORDS
+    }
+    properties = strict.get("properties")
+    if strict.get("type") == "object" and isinstance(properties, dict):
+        strict["additionalProperties"] = False
+        strict["required"] = list(properties)
+    return strict
+
+
+def _openai_response_format(schema: type[BaseModel] | None) -> JsonBody:
+    """Ask for JSON, preferring the provider-native schema.
+
+    OpenAI-compatible gateways increasingly reject the older
+    ``{"type": "json_object"}`` shape and require ``json_schema`` with strict
+    mode on.  Pydantic's constraints are not valid strict-mode keywords, so the
+    schema is reduced to strict's subset; the local validator still enforces
+    the full model.
+    """
+    if schema is None:
+        return {"type": "json_object"}
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": schema.__name__,
+            "strict": True,
+            "schema": _strict_json_schema(schema.model_json_schema()),
+        },
+    }
+
+
 class _Adapter(Protocol):
     def build_request(
-        self, messages: Sequence[Message], *, json_mode: bool
+        self,
+        messages: Sequence[Message],
+        *,
+        json_mode: bool,
+        schema: type[BaseModel] | None = None,
     ) -> tuple[str, dict[str, str], JsonBody]: ...
 
     def parse_response(self, body: JsonBody) -> _Reply: ...
@@ -190,7 +261,11 @@ class _GeminiAdapter:
     api_key: str
 
     def build_request(
-        self, messages: Sequence[Message], *, json_mode: bool
+        self,
+        messages: Sequence[Message],
+        *,
+        json_mode: bool,
+        schema: type[BaseModel] | None = None,
     ) -> tuple[str, dict[str, str], JsonBody]:
         system_text, chat = _split_system(messages)
         contents = [
@@ -263,7 +338,11 @@ class _OpenAIAdapter:
     token_field: str
 
     def build_request(
-        self, messages: Sequence[Message], *, json_mode: bool
+        self,
+        messages: Sequence[Message],
+        *,
+        json_mode: bool,
+        schema: type[BaseModel] | None = None,
     ) -> tuple[str, dict[str, str], JsonBody]:
         body: JsonBody = {
             "model": self.cfg.model,
@@ -276,7 +355,7 @@ class _OpenAIAdapter:
         if self.cfg.temperature is not None:
             body["temperature"] = self.cfg.temperature
         if json_mode:
-            body["response_format"] = {"type": "json_object"}
+            body["response_format"] = _openai_response_format(schema)
         headers: dict[str, str] = {}
         if self.api_key is not None:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -323,7 +402,11 @@ class _AnthropicAdapter:
     api_key: str
 
     def build_request(
-        self, messages: Sequence[Message], *, json_mode: bool
+        self,
+        messages: Sequence[Message],
+        *,
+        json_mode: bool,
+        schema: type[BaseModel] | None = None,
     ) -> tuple[str, dict[str, str], JsonBody]:
         if json_mode:
             raise ConfigError("anthropic has no JSON mode; use prompt")
@@ -457,9 +540,10 @@ class LLMClient:
         messages: Sequence[Message],
         *,
         json_mode: bool = False,
+        schema: type[BaseModel] | None = None,
     ) -> Completion:
         """Send one conversation and return a parsed Completion."""
-        return self._complete(messages, json_mode=json_mode, attempt=1)
+        return self._complete(messages, json_mode=json_mode, attempt=1, schema=schema)
 
     def generate[ModelT: BaseModel](
         self,
@@ -473,7 +557,10 @@ class LLMClient:
             nonlocal structured_attempt
             structured_attempt += 1
             return self._complete(
-                next_messages, json_mode=json_mode, attempt=structured_attempt
+                next_messages,
+                json_mode=json_mode,
+                attempt=structured_attempt,
+                schema=schema,
             )
 
         return _generate_structured(
@@ -492,8 +579,11 @@ class LLMClient:
         *,
         json_mode: bool,
         attempt: int,
+        schema: type[BaseModel] | None = None,
     ) -> Completion:
-        url, headers, body = self._adapter.build_request(messages, json_mode=json_mode)
+        url, headers, body = self._adapter.build_request(
+            messages, json_mode=json_mode, schema=schema
+        )
         total_attempts = self._cfg.max_retries + 1
         last_error = "request failed"
 
